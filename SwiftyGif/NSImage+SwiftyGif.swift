@@ -95,7 +95,9 @@ public extension NSImage {
         self.imageSource = imageSource
         imageData = data
         
-        calculateFrameDelay(try delayTimes(imageSource), levelOfIntegrity: levelOfIntegrity)
+        let delayTimes = try delayTimes(imageSource)
+        self.frameDelayTimes = delayTimes
+        calculateFrameDelay(delayTimes, levelOfIntegrity: levelOfIntegrity)
         calculateFrameSize()
     }
     
@@ -111,6 +113,21 @@ public extension NSImage {
     /// - Return number of frames
     func framesCount() -> Int {
         return displayOrder?.count ?? 0
+    }
+    
+    func duration(for frameIndex: Int) -> Float? {
+        guard let delayTimes = frameDelayTimes, delayTimes.count > frameIndex else {
+            return nil
+        }
+        return delayTimes[frameIndex]
+    }
+    
+    func image(for frameIndex: Int) -> NSImage? {
+        guard let imageSource, let cgImage = CGImageSourceCreateImageAtIndex(imageSource, frameIndex, nil) else {
+            return nil
+        }
+        
+        return NSImage(cgImage: cgImage, size: .zero)
     }
 
     private func giflog(_ msg: String) {
@@ -139,6 +156,8 @@ public extension NSImage {
         displayOrder = nil
         imageCount = nil
         imageSize = nil
+        imageFrameSize = nil
+        frameDelayTimes = nil
         displayRefreshFactor = nil
     }
     
@@ -216,10 +235,22 @@ public extension NSImage {
         var delays = delaysArray
         
         // Factors send to CADisplayLink.frameInterval
-        let displayRefreshFactors = [60, 30, 20, 15, 12, 10, 6, 5, 4, 3, 2, 1]
+        var displayRefreshFactors = [Int]()
+
+        if #available(macOS 12.0, *), let screen = NSScreen.main {
+          // Will be 120 on devices with ProMotion display, 60 otherwise.
+          displayRefreshFactors.append(screen.maximumFramesPerSecond)
+        }
+
+        if displayRefreshFactors[0] != 60 {
+          // Append 60 if needed.
+          displayRefreshFactors.append(60)
+        }
         
         // maxFramePerSecond,default is 60
         let maxFramePerSecond = displayRefreshFactors[0]
+        
+        displayRefreshFactors.append(contentsOf: [30, 20, 15, 12, 10, 6, 5, 4, 3, 2, 1])
         
         // frame numbers per second
         let displayRefreshRates = displayRefreshFactors.map { maxFramePerSecond / $0 }
@@ -277,6 +308,7 @@ public extension NSImage {
         
         
         let image = NSImage(cgImage: cgImage, size: .zero)
+        imageFrameSize = image.size
         imageSize = Int(image.size.height * image.size.width * 4) * imageCount / 1_000_000
     }
 }
@@ -286,9 +318,11 @@ public extension NSImage {
 private let _imageSourceKey = malloc(4)
 private let _displayRefreshFactorKey = malloc(4)
 private let _imageSizeKey = malloc(4)
+private let _imageFrameSizeKey = malloc(4)
 private let _imageCountKey = malloc(4)
 private let _displayOrderKey = malloc(4)
 private let _imageDataKey = malloc(4)
+private let _frameDelayTimesKey = malloc(4)
 
 public extension NSImage {
     
@@ -312,6 +346,11 @@ public extension NSImage {
         set { objc_setAssociatedObject(self, _imageSizeKey!, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
     }
     
+    var imageFrameSize: CGSize? {
+        get { return objc_getAssociatedObject(self, _imageFrameSizeKey!) as? CGSize }
+        set { objc_setAssociatedObject(self, _imageFrameSizeKey!, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
+    }
+    
     var imageCount: Int?{
         get { return objc_getAssociatedObject(self, _imageCountKey!) as? Int }
         set { objc_setAssociatedObject(self, _imageCountKey!, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
@@ -330,6 +369,11 @@ public extension NSImage {
         set {
             objc_setAssociatedObject(self, _imageDataKey!, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
+    }
+    
+    var frameDelayTimes: [Float]? {
+        get { return objc_getAssociatedObject(self, _frameDelayTimesKey!) as? [Float] }
+        set { objc_setAssociatedObject(self, _frameDelayTimesKey!, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
     }
 }
 
