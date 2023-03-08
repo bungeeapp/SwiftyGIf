@@ -122,12 +122,12 @@ public extension NSImage {
         return delayTimes[frameIndex]
     }
     
-    func image(for frameIndex: Int) -> NSImage? {
-        guard let imageSource, let cgImage = CGImageSourceCreateImageAtIndex(imageSource, frameIndex, nil) else {
+    func image(for frameIndex: Int) -> CGImage? {
+        guard let imageSource else {
             return nil
         }
         
-        return NSImage(cgImage: cgImage, size: .zero)
+        return CGImageSourceCreateImageAtIndex(imageSource, frameIndex, nil) 
     }
 
     private func giflog(_ msg: String) {
